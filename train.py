@@ -24,12 +24,12 @@ from dln.data import get_training_set, is_image_file, get_Low_light_training_set
 from dln.utils import TVLoss, print_network
 from model import DLN
 
-Name_Exp = "DLN"
+Name_Exp = "DLN-Jax"
 exp = Experiment(Name_Exp)
 # exp.observers.append(MongoObserver(url='Host:27017', db_name='low_light'))
 exp.add_source_file("train.py")
 exp.add_source_file("model.py")
-exp.add_source_file("lib/dataset.py")
+exp.add_source_file("dln/dataset.py")
 exp.captured_out_filter = apply_backspaces_and_linefeeds
 
 
@@ -45,7 +45,7 @@ def cfg():
     parser.add_argument(
         "--lr", type=float, default=1e-5, help="Learning Rate. Default=0.0001"
     )
-    parser.add_argument("--gpu_mode", type=bool, default=True)
+    parser.add_argument("--gpu_mode", type=bool, default=False)
     parser.add_argument(
         "--threads",
         type=int,
@@ -121,7 +121,7 @@ def eval(model, epoch):
     ]
     for i in range(test_LL_list.__len__()):
         with torch.no_grad():
-            LL = trans(Image.open(test_LL_list[i]).convert("RGB")).unsqueeze(0).cuda()
+            LL = trans(Image.open(test_LL_list[i]).convert("RGB")).unsqueeze(0)
             prediction = model(LL)
             prediction = prediction.data[0].cpu().numpy().transpose(channel_swap)
             prediction = prediction * 255.0
@@ -210,8 +210,8 @@ def main(opt, _run):
     # =============================#
     #         Training             #
     # =============================#
-    psnr_score, ssim_score = eval(lighten, 0)
-    print(psnr_score)
+    # psnr_score, ssim_score = eval(lighten, 0)
+    psnr_score = ssim_score = 0
     for epoch in range(opt.start_iter, opt.nEpochs + 1):
         print("===> training epoch %d" % epoch)
         epoch_loss = 0
@@ -228,7 +228,7 @@ def main(opt, _run):
                 NL_t = NL_t.cuda()
 
             t0 = time.time()
-
+            import ipdb; ipdb.set_trace()
             pred_t = lighten(LL_t)
 
             ssim_loss = 1 - ssim(pred_t, NL_t)
