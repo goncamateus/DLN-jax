@@ -20,8 +20,8 @@ from skimage.metrics.simple_metrics import peak_signal_noise_ratio as compare_ps
 from torch.utils.data import DataLoader
 
 from dln.ssim import SSIM
-from lib.data import get_training_set, is_image_file, get_Low_light_training_set
-from lib.utils import TVLoss, print_network
+from dln.data import get_training_set, is_image_file, get_Low_light_training_set
+from dln.utils import TVLoss, print_network
 from model import DLN
 
 Name_Exp = "DLN"

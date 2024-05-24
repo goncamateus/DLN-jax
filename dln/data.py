@@ -2,7 +2,7 @@ from os.path import join
 
 from torchvision.transforms import Compose, ToTensor
 
-from lib.dataset import DatasetFromFolderEval, DatasetFromFolder, Lowlight_DatasetFromVOC
+from dln.dataset import DatasetFromFolderEval, DatasetFromFolder, Lowlight_DatasetFromVOC
 
 
 def transform():
