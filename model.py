@@ -1,35 +1,42 @@
 import torch
 import torch.nn as nn
 
+
 class LightenBlock(torch.nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True):
+    def __init__(
+        self, input_size, output_size, kernel_size, stride, padding, bias=True
+    ):
         super(LightenBlock, self).__init__()
-        codedim=output_size//2
-        self.conv_Encoder = ConvBlock(input_size, codedim, 3, 1, 1,isuseBN=False)
-        self.conv_Offset = ConvBlock(codedim, codedim, 3, 1, 1,isuseBN=False)
-        self.conv_Decoder = ConvBlock(codedim, output_size, 3, 1, 1,isuseBN=False)
+        codedim = output_size // 2
+        self.conv_Encoder = ConvBlock(input_size, codedim, 3, 1, 1, isuseBN=False)
+        self.conv_Offset = ConvBlock(codedim, codedim, 3, 1, 1, isuseBN=False)
+        self.conv_Decoder = ConvBlock(codedim, output_size, 3, 1, 1, isuseBN=False)
 
     def forward(self, x):
-        code= self.conv_Encoder(x)
+        code = self.conv_Encoder(x)
         offset = self.conv_Offset(code)
-        code_lighten = code+offset
+        code_lighten = code + offset
         out = self.conv_Decoder(code_lighten)
         return out
+
 
 class DarkenBlock(torch.nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True):
+    def __init__(
+        self, input_size, output_size, kernel_size, stride, padding, bias=True
+    ):
         super(DarkenBlock, self).__init__()
-        codedim=output_size//2
-        self.conv_Encoder = ConvBlock(input_size, codedim, 3, 1, 1,isuseBN=False)
-        self.conv_Offset = ConvBlock(codedim, codedim, 3, 1, 1,isuseBN=False)
-        self.conv_Decoder = ConvBlock(codedim, output_size, 3, 1, 1,isuseBN=False)
+        codedim = output_size // 2
+        self.conv_Encoder = ConvBlock(input_size, codedim, 3, 1, 1, isuseBN=False)
+        self.conv_Offset = ConvBlock(codedim, codedim, 3, 1, 1, isuseBN=False)
+        self.conv_Decoder = ConvBlock(codedim, output_size, 3, 1, 1, isuseBN=False)
 
     def forward(self, x):
-        code= self.conv_Encoder(x)
+        code = self.conv_Encoder(x)
         offset = self.conv_Offset(code)
-        code_lighten = code-offset
+        code_lighten = code - offset
         out = self.conv_Decoder(code_lighten)
         return out
+
 
 class FusionLayer(nn.Module):
     def __init__(self, inchannel, outchannel, reduction=16):
@@ -39,7 +46,7 @@ class FusionLayer(nn.Module):
             nn.Linear(inchannel, inchannel // reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(inchannel // reduction, inchannel, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
         self.outlayer = ConvBlock(inchannel, outchannel, 1, 1, 0, bias=True)
 
@@ -56,15 +63,25 @@ class FusionLayer(nn.Module):
 class LBP(torch.nn.Module):
     def __init__(self, input_size, output_size, kernel_size, stride, padding):
         super(LBP, self).__init__()
-        self.fusion = FusionLayer(input_size,output_size)
-        self.conv1_1 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv2 = DarkenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv3 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.local_weight1_1 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
-        self.local_weight2_1 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
+        self.fusion = FusionLayer(input_size, output_size)
+        self.conv1_1 = LightenBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv2 = DarkenBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv3 = LightenBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.local_weight1_1 = ConvBlock(
+            output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.local_weight2_1 = ConvBlock(
+            output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
 
     def forward(self, x):
-        x=self.fusion(x)
+        x = self.fusion(x)
         hr = self.conv1_1(x)
         lr = self.conv2(hr)
         residue = self.local_weight1_1(x) - lr
@@ -81,22 +98,30 @@ class DLN(nn.Module):
         self.feat1 = ConvBlock(inNet_dim, 2 * dim, 3, 1, 1)
         self.feat2 = ConvBlock(2 * dim, dim, 3, 1, 1)
 
-        self.feat_out_1 = LBP(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
-        self.feat_out_2 = LBP(input_size=2 * dim, output_size=dim, kernel_size=3, stride=1,
-                              padding=1)
-        self.feat_out_3 = LBP(input_size=3 * dim, output_size=dim, kernel_size=3, stride=1,
-                              padding=1)
+        self.feat_out_1 = LBP(
+            input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1
+        )
+        self.feat_out_2 = LBP(
+            input_size=2 * dim, output_size=dim, kernel_size=3, stride=1, padding=1
+        )
+        self.feat_out_3 = LBP(
+            input_size=3 * dim, output_size=dim, kernel_size=3, stride=1, padding=1
+        )
 
-        self.feature = ConvBlock(input_size=4 * dim, output_size=dim, kernel_size=3, stride=1, padding=1)
-        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+        self.feature = ConvBlock(
+            input_size=4 * dim, output_size=dim, kernel_size=3, stride=1, padding=1
+        )
+        self.out = nn.Conv2d(
+            in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1
+        )
 
         for m in self.modules():
             classname = m.__class__.__name__
-            if classname.find('Conv2d') != -1:
+            if classname.find("Conv2d") != -1:
                 torch.nn.init.kaiming_normal_(m.weight)
                 if m.bias is not None:
                     m.bias.data.zero_()
-            elif classname.find('ConvTranspose2d') != -1:
+            elif classname.find("ConvTranspose2d") != -1:
                 torch.nn.init.kaiming_normal_(m.weight)
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -119,7 +144,9 @@ class DLN(nn.Module):
         feature_3_in = torch.cat([feature_1_in, feature_1_out, feature_2_out], dim=1)
         feature_3_out = self.feat_out_3(feature_3_in)
 
-        feature_in = torch.cat([feature_1_in, feature_1_out, feature_2_out, feature_3_out], dim=1)
+        feature_in = torch.cat(
+            [feature_1_in, feature_1_out, feature_2_out, feature_3_out], dim=1
+        )
         feature_out = self.feature(feature_in)
         pred = self.out(feature_out) + x_ori
 
@@ -130,11 +157,23 @@ class DLN(nn.Module):
 # Base models
 ############################################################################################
 
+
 class ConvBlock(torch.nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True, isuseBN=False):
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        kernel_size,
+        stride,
+        padding,
+        bias=True,
+        isuseBN=False,
+    ):
         super(ConvBlock, self).__init__()
         self.isuseBN = isuseBN
-        self.conv = torch.nn.Conv2d(input_size, output_size, kernel_size, stride, padding, bias=bias)
+        self.conv = torch.nn.Conv2d(
+            input_size, output_size, kernel_size, stride, padding, bias=bias
+        )
         if self.isuseBN:
             self.bn = nn.BatchNorm2d(output_size)
         self.act = torch.nn.PReLU()
@@ -148,10 +187,14 @@ class ConvBlock(torch.nn.Module):
 
 
 class DeconvBlock(torch.nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True):
+    def __init__(
+        self, input_size, output_size, kernel_size, stride, padding, bias=True
+    ):
         super(DeconvBlock, self).__init__()
 
-        self.deconv = torch.nn.ConvTranspose2d(input_size, output_size, kernel_size, stride, padding, bias=bias)
+        self.deconv = torch.nn.ConvTranspose2d(
+            input_size, output_size, kernel_size, stride, padding, bias=bias
+        )
 
         self.act = torch.nn.PReLU()
 
@@ -165,11 +208,21 @@ class UpBlock(torch.nn.Module):
     def __init__(self, input_size, output_size, kernel_size, stride, padding):
         super(UpBlock, self).__init__()
 
-        self.conv1 = DeconvBlock(input_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv2 = ConvBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv3 = DeconvBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.local_weight1 = ConvBlock(input_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
-        self.local_weight2 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
+        self.conv1 = DeconvBlock(
+            input_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv2 = ConvBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv3 = DeconvBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.local_weight1 = ConvBlock(
+            input_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.local_weight2 = ConvBlock(
+            output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
 
     def forward(self, x):
         hr = self.conv1(x)
@@ -184,11 +237,21 @@ class DownBlock(torch.nn.Module):
     def __init__(self, input_size, output_size, kernel_size, stride, padding):
         super(DownBlock, self).__init__()
 
-        self.conv1 = ConvBlock(input_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv2 = DeconvBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.conv3 = ConvBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
-        self.local_weight1 = ConvBlock(input_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
-        self.local_weight2 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
+        self.conv1 = ConvBlock(
+            input_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv2 = DeconvBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.conv3 = ConvBlock(
+            output_size, output_size, kernel_size, stride, padding, bias=True
+        )
+        self.local_weight1 = ConvBlock(
+            input_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.local_weight2 = ConvBlock(
+            output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True
+        )
 
     def forward(self, x):
         lr = self.conv1(x)
@@ -202,9 +265,13 @@ class DownBlock(torch.nn.Module):
 class ResnetBlock(torch.nn.Module):
     def __init__(self, num_filter, kernel_size=3, stride=1, padding=1, bias=True):
         super(ResnetBlock, self).__init__()
-        self.conv1 = torch.nn.Conv2d(num_filter, num_filter, kernel_size, stride, padding, bias=bias)
+        self.conv1 = torch.nn.Conv2d(
+            num_filter, num_filter, kernel_size, stride, padding, bias=bias
+        )
         self.bn1 = nn.BatchNorm2d(num_filter)
-        self.conv2 = torch.nn.Conv2d(num_filter, num_filter, kernel_size, stride, padding, bias=bias)
+        self.conv2 = torch.nn.Conv2d(
+            num_filter, num_filter, kernel_size, stride, padding, bias=bias
+        )
         self.bn2 = nn.BatchNorm2d(num_filter)
 
         self.act1 = torch.nn.PReLU()
