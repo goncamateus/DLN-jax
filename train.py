@@ -228,7 +228,6 @@ def main(opt, _run):
                 NL_t = NL_t.cuda()
 
             t0 = time.time()
-            import ipdb; ipdb.set_trace()
             pred_t = lighten(LL_t)
 
             ssim_loss = 1 - ssim(pred_t, NL_t)

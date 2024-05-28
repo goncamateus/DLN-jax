@@ -129,7 +129,9 @@ class LBP(nn.Module):
             self.stride,
             self.padding,
             use_bias=True,
-        )(lambda_1 - ll_est)
+        )(
+            ll_est - lambda_1
+        )  # Original code was lambda_1 - ll_est but paper is this way i wrote
         y_est = lambda_2 + nl_est_2
         return y_est
 
