@@ -4,6 +4,18 @@ import jax.numpy as jnp
 from flax import linen as nn
 
 
+def kaiming_normal_initializer(shape, dtype):
+    """Kaiming normal initialization."""
+    fan_in = shape[-2] * shape[-3] if len(shape) == 4 else shape[-1]
+    stddev = jnp.sqrt(2.0 / fan_in)
+    return jax.random.normal(jax.random.PRNGKey(0), shape, dtype) * stddev
+
+
+def bias_initializer(shape, dtype):
+    """Zero initialization for bias."""
+    return jnp.zeros(shape, dtype)
+
+
 class ConvBlock(nn.Module):
     output_size: int
     kernel_size: tuple
@@ -20,6 +32,8 @@ class ConvBlock(nn.Module):
             strides=self.stride,
             padding=self.padding,
             use_bias=self.use_bias,
+            # kernel_init=kaiming_normal_initializer,
+            # bias_init=bias_initializer if self.use_bias else None,
         )(x)
         if self.use_bn:
             x = nn.BatchNorm(use_running_average=not training)(x)
@@ -89,10 +103,16 @@ class DarkenBlock(nn.Module):
     @nn.compact
     def __call__(self, normal_light):
         code_dim = self.output_size // 2
-        encode = ConvBlock(code_dim, 3, 1, 1, use_bn=False)(normal_light)
-        offset = ConvBlock(code_dim, 3, 1, 1, use_bn=False)(encode)
+        encode = ConvBlock(code_dim, 3, 1, 1, use_bn=False, use_bias=self.use_bias)(
+            normal_light
+        )
+        offset = ConvBlock(code_dim, 3, 1, 1, use_bn=False, use_bias=self.use_bias)(
+            encode
+        )
         residual_sub = encode - offset
-        low_light = ConvBlock(self.output_size, 3, 1, 1, use_bn=False)(residual_sub)
+        low_light = ConvBlock(
+            self.output_size, 3, 1, 1, use_bn=False, use_bias=self.use_bias
+        )(residual_sub)
         return low_light
 
 
@@ -162,7 +182,12 @@ class DLN(nn.Module):
         all_concat = jnp.concatenate((feat2, lbp_1, lbp2, lbp3), axis=3)
         residual_1 = ConvBlock(4 * self.dim, 3, 1, 1)(all_concat, training=training)
         residual_2 = nn.Conv(
-            features=3, kernel_size=3, strides=1, padding=1, use_bias=False
+            features=3,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            use_bias=False,
+            # kernel_init=kaiming_normal_initializer,
         )(residual_1)
         nl_pred = inputs + residual_2
         return nl_pred
