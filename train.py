@@ -60,7 +60,7 @@ def eval_step(state, X, y):
 
 def evaluate_model(state, batch_size):
     """Evaluate on the validation set."""
-    test_ds = get_LOL_test_loader(
+    test_ds = get_VOC2007_test_loader(
         patch_size=128,
         upscale_factor=1,
         data_augmentation=True,
@@ -143,7 +143,6 @@ def main():
     first_nl = jnp.float32(first_nl)
     plot_pred(train_state.params, first_ll, first_nl, name="output/before_training.png")
     num_steps_per_epoch = train_loader.cardinality().numpy() // num_epochs
-    print(num_steps_per_epoch)
     metrics_history = {
         "train_loss": [],
         "train_psnr": [],
@@ -153,8 +152,8 @@ def main():
         "test_ssim": [],
     }
     batch_metrics = []
-
-    for step, (ll, nl) in tqdm(enumerate(train_loader.as_numpy_iterator())):
+    epoch_time_init = time.time()
+    for step, (ll, nl) in enumerate(train_loader.as_numpy_iterator()):
         X = jnp.float32(ll)
         y = jnp.float32(nl)
         train_state, metrics = train_step(train_state, X, y)
@@ -202,6 +201,9 @@ def main():
                 epoch, ckpt, save_kwargs={"save_args": save_args}
             ):
                 print(f"Saved checkpoint for epoch {epoch}")
+            end_time = time.time()
+            print("Time taken for epoch: ", (end_time - epoch_time_init), "seconds")
+            epoch_time_init = end_time
 
     plot_pred(train_state.params, first_ll, first_nl, name="output/after_training.png")
 
