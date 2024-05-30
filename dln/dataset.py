@@ -14,11 +14,13 @@ sys.path.append(path)
 
 
 def is_image_file(filename):
-    return any(filename.endswith(extension) for extension in [".bmp", ".png", ".jpg", ".jpeg"])
+    return any(
+        filename.endswith(extension) for extension in [".bmp", ".png", ".jpg", ".jpeg"]
+    )
 
 
 def load_img(filepath):
-    img = Image.open(filepath).convert('RGB')
+    img = Image.open(filepath).convert("RGB")
     # y, _, _ = img.split()
     return img
 
@@ -56,35 +58,46 @@ def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):
 
 
 def augment(img_in, img_tar, flip_h=True, rot=True):
-    info_aug = {'flip_h': False, 'flip_v': False, 'trans': False}
+    info_aug = {"flip_h": False, "flip_v": False, "trans": False}
 
     if random.random() < 0.5 and flip_h:
         img_in = ImageOps.flip(img_in)
         img_tar = ImageOps.flip(img_tar)
         # img_bic = ImageOps.flip(img_bic)
-        info_aug['flip_h'] = True
+        info_aug["flip_h"] = True
 
     if rot:
         if random.random() < 0.5:
             img_in = ImageOps.mirror(img_in)
             img_tar = ImageOps.mirror(img_tar)
             # img_bic = ImageOps.mirror(img_bic)
-            info_aug['flip_v'] = True
+            info_aug["flip_v"] = True
         if random.random() < 0.5:
             img_in = img_in.rotate(180)
             img_tar = img_tar.rotate(180)
             # img_bic = img_bic.rotate(180)
-            info_aug['trans'] = True
+            info_aug["trans"] = True
 
     return img_in, img_tar, info_aug
 
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, HR_dir, LR_dir, patch_size, upscale_factor, data_augmentation,
-                 transform=None):
+    def __init__(
+        self,
+        HR_dir,
+        LR_dir,
+        patch_size,
+        upscale_factor,
+        data_augmentation,
+        transform=None,
+    ):
         super(DatasetFromFolder, self).__init__()
-        self.hr_image_filenames = [join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
-        self.lr_image_filenames = [join(LR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
+        self.hr_image_filenames = [
+            join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)
+        ]
+        self.lr_image_filenames = [
+            join(LR_dir, x) for x in listdir(HR_dir) if is_image_file(x)
+        ]
         self.patch_size = patch_size
         self.upscale_factor = upscale_factor
         self.transform = transform
@@ -102,7 +115,10 @@ class DatasetFromFolder(data.Dataset):
         # input_eq = ImageOps.equalize(input)
         # target = ImageOps.equalize(target)
         #         # input = ImageOps.equalize(input)
-        input, target, = get_patch(input, target, self.patch_size, self.upscale_factor)
+        (
+            input,
+            target,
+        ) = get_patch(input, target, self.patch_size, self.upscale_factor)
 
         if self.data_augmentation:
             img_in, img_tar, _ = augment(input, target)
@@ -120,7 +136,9 @@ class DatasetFromFolder(data.Dataset):
 class DatasetFromFolderEval(data.Dataset):
     def __init__(self, lr_dir, upscale_factor, transform=None):
         super(DatasetFromFolderEval, self).__init__()
-        self.image_filenames = [join(lr_dir, x) for x in listdir(lr_dir) if is_image_file(x)]
+        self.image_filenames = [
+            join(lr_dir, x) for x in listdir(lr_dir) if is_image_file(x)
+        ]
         self.upscale_factor = upscale_factor
         self.transform = transform
 
@@ -141,11 +159,12 @@ class DatasetFromFolderEval(data.Dataset):
 
 
 class Lowlight_DatasetFromVOC(data.Dataset):
-    def __init__(self, patch_size, upscale_factor, data_augmentation,
-                 transform=None):
+    def __init__(self, patch_size, upscale_factor, data_augmentation, transform=None):
         super(Lowlight_DatasetFromVOC, self).__init__()
         self.imgFolder = "datasets/train/VOC2007/JPEGImages"
-        self.image_filenames = [join(self.imgFolder, x) for x in listdir(self.imgFolder) if is_image_file(x)]
+        self.image_filenames = [
+            join(self.imgFolder, x) for x in listdir(self.imgFolder) if is_image_file(x)
+        ]
 
         self.image_filenames = self.image_filenames
         self.patch_size = patch_size
@@ -173,7 +192,7 @@ class Lowlight_DatasetFromVOC(data.Dataset):
 
         ori_img = cv2.cvtColor((np.asarray(ori_img)), cv2.COLOR_RGB2BGR)  # cv2 image
         ori_img = (ori_img.clip(0, 255)).astype("uint8")
-        low_img = ori_img.astype('double') / 255.0
+        low_img = ori_img.astype("double") / 255.0
 
         # generate low-light image
         beta = 0.5 * random.random() + 0.5
@@ -185,7 +204,135 @@ class Lowlight_DatasetFromVOC(data.Dataset):
         low_img = (low_img.clip(0, 255)).astype("uint8")
         low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
 
-        img_in, img_tar = get_patch(low_img, high_image, self.patch_size, self.upscale_factor)
+        img_in, img_tar = get_patch(
+            low_img, high_image, self.patch_size, self.upscale_factor
+        )
+
+        if self.data_augmentation:
+            img_in, img_tar, _ = augment(img_in, img_tar)
+
+        if self.transform:
+            img_in = self.transform(img_in)
+            img_tar = self.transform(img_tar)
+
+        return img_in, img_tar
+
+    def __len__(self):
+        return len(self.image_filenames)
+
+
+class Lowlight_DatasetFromVOC(data.Dataset):
+    def __init__(self, patch_size, upscale_factor, data_augmentation, transform=None):
+        super(Lowlight_DatasetFromVOC, self).__init__()
+        self.imgFolder = "datasets/train/VOC2007/JPEGImages"
+        self.image_filenames = [
+            join(self.imgFolder, x) for x in listdir(self.imgFolder) if is_image_file(x)
+        ]
+
+        self.image_filenames = self.image_filenames
+        self.patch_size = patch_size
+        self.upscale_factor = upscale_factor
+        self.transform = transform
+        self.data_augmentation = data_augmentation
+
+    def __getitem__(self, index):
+
+        ori_img = load_img(self.image_filenames[index])  # PIL image
+        width, height = ori_img.size
+        ratio = min(width, height) / 384
+
+        newWidth = int(width / ratio)
+        newHeight = int(height / ratio)
+        ori_img = ori_img.resize((newWidth, newHeight), Image.LANCZOS)
+
+        high_image = ori_img
+
+        ## color and contrast *dim*
+        color_dim_factor = 0.3 * random.random() + 0.7
+        contrast_dim_factor = 0.3 * random.random() + 0.7
+        ori_img = ImageEnhance.Color(ori_img).enhance(color_dim_factor)
+        ori_img = ImageEnhance.Contrast(ori_img).enhance(contrast_dim_factor)
+
+        ori_img = cv2.cvtColor((np.asarray(ori_img)), cv2.COLOR_RGB2BGR)  # cv2 image
+        ori_img = (ori_img.clip(0, 255)).astype("uint8")
+        low_img = ori_img.astype("double") / 255.0
+
+        # generate low-light image
+        beta = 0.5 * random.random() + 0.5
+        alpha = 0.1 * random.random() + 0.9
+        gamma = 3.5 * random.random() + 1.5
+        low_img = beta * np.power(alpha * low_img, gamma)
+
+        low_img = low_img * 255.0
+        low_img = (low_img.clip(0, 255)).astype("uint8")
+        low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
+
+        img_in, img_tar = get_patch(
+            low_img, high_image, self.patch_size, self.upscale_factor
+        )
+
+        if self.data_augmentation:
+            img_in, img_tar, _ = augment(img_in, img_tar)
+
+        if self.transform:
+            img_in = self.transform(img_in)
+            img_tar = self.transform(img_tar)
+
+        return img_in, img_tar
+
+    def __len__(self):
+        return len(self.image_filenames)
+
+
+class Lowlight_DatasetFromVOCTest(data.Dataset):
+    def __init__(self, patch_size, upscale_factor, data_augmentation, transform=None):
+        super(Lowlight_DatasetFromVOCTest, self).__init__()
+        self.imgFolder = "datasets/test/VOC2007/JPEGImages"
+        self.image_filenames = [
+            join(self.imgFolder, x) for x in listdir(self.imgFolder) if is_image_file(x)
+        ]
+
+        self.image_filenames = self.image_filenames
+        self.patch_size = patch_size
+        self.upscale_factor = upscale_factor
+        self.transform = transform
+        self.data_augmentation = data_augmentation
+
+    def __getitem__(self, index):
+
+        ori_img = load_img(self.image_filenames[index])  # PIL image
+        width, height = ori_img.size
+        ratio = min(width, height) / 384
+
+        newWidth = int(width / ratio)
+        newHeight = int(height / ratio)
+        ori_img = ori_img.resize((newWidth, newHeight), Image.LANCZOS)
+
+        high_image = ori_img
+
+        ## color and contrast *dim*
+        color_dim_factor = 0.3 * random.random() + 0.7
+        contrast_dim_factor = 0.3 * random.random() + 0.7
+        ori_img = ImageEnhance.Color(ori_img).enhance(color_dim_factor)
+        ori_img = ImageEnhance.Contrast(ori_img).enhance(contrast_dim_factor)
+
+        ori_img = cv2.cvtColor((np.asarray(ori_img)), cv2.COLOR_RGB2BGR)  # cv2 image
+        ori_img = (ori_img.clip(0, 255)).astype("uint8")
+        low_img = ori_img.astype("double") / 255.0
+
+        # generate low-light image
+        beta = 0.5 * random.random() + 0.5
+        alpha = 0.1 * random.random() + 0.9
+        gamma = 3.5 * random.random() + 1.5
+        low_img = beta * np.power(alpha * low_img, gamma)
+
+        low_img = low_img * 255.0
+        low_img = (low_img.clip(0, 255)).astype("uint8")
+        low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
+
+        img_in, img_tar = get_patch(
+            low_img, high_image, self.patch_size, self.upscale_factor
+        )
 
         if self.data_augmentation:
             img_in, img_tar, _ = augment(img_in, img_tar)
