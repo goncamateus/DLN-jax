@@ -31,6 +31,7 @@ def compute_metrics(*, y_pred, y):
     metrics = {
         "loss": loss,
         "psnr": res_psnr,
+        "ssim": 1 - ssim_loss,
     }
     return metrics
 
@@ -119,14 +120,14 @@ def plot_pred(params, X, y, name="prediction.png"):
     plt.imshow(y[0])
     plt.title("Normal light")
     plt.subplot(1, 3, 3)
-    plt.imshow(X[0])
+    plt.imshow(y_pred[0])
     plt.title("Prediction")
     plt.savefig(name)
 
 
 def main():
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
-    dln_chkpts = f"{abs_folder_path}/DLN-{int(time.time())}/"
+    dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{int(time.time())}/"
 
     seed = 0  # needless to say these should be in a config or defined like flags
     learning_rate = 1e-3
@@ -153,12 +154,12 @@ def main():
     for epoch in range(1, num_epochs + 1):
         train_state, train_metrics = train_one_epoch(train_state, train_set, batch_size)
         print(
-            f"Train epoch: {epoch}, loss: {train_metrics['loss']}, psnr: {train_metrics['psnr']}"
+            f"Train epoch: {epoch}, loss: {train_metrics['loss']}, psnr: {train_metrics['psnr']}, ssim: {train_metrics['ssim']}"
         )
         test_state = train_state
         test_metrics = evaluate_model(test_state, test_set, batch_size)
         print(
-            f"Test epoch: {epoch}, loss: {test_metrics['loss']}, psnr: {test_metrics['psnr']}"
+            f"Test epoch: {epoch}, loss: {test_metrics['loss']}, psnr: {test_metrics['psnr']}, ssim: {train_metrics['ssim']}"
         )
         ckpt = {"model": train_state}
         if checkpoint_manager.save(epoch, ckpt, save_kwargs={"save_args": save_args}):
