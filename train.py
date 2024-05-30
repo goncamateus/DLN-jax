@@ -115,7 +115,7 @@ def main():
     dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 2
+    num_epochs = 100
     batch_size = 12
 
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
@@ -141,7 +141,7 @@ def main():
 
     first_ll = jnp.float32(first_ll)
     first_nl = jnp.float32(first_nl)
-    plot_pred(train_state.params, first_ll, first_nl, name="before_training.png")
+    plot_pred(train_state.params, first_ll, first_nl, name="output/before_training.png")
     num_steps_per_epoch = train_loader.cardinality().numpy() // num_epochs
     print(num_steps_per_epoch)
     metrics_history = {
@@ -203,7 +203,7 @@ def main():
             ):
                 print(f"Saved checkpoint for epoch {epoch}")
 
-    plot_pred(train_state.params, first_ll, first_nl, name="after_training.png")
+    plot_pred(train_state.params, first_ll, first_nl, name="output/after_training.png")
 
 
 if __name__ == "__main__":
