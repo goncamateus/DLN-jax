@@ -2,6 +2,8 @@ from dln.datasets import get_dataset, LOL, VOC2007
 
 
 class DataLoader:
+    dataset_type = None
+
     def __init__(
         self,
         img_folder,

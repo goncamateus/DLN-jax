@@ -1,8 +1,6 @@
 import os
 import time
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -71,8 +69,8 @@ def evaluate_model(state, batch_size):
     )
     batch_metrics = []
     for ll, nl in test_ds.as_numpy_iterator():
-        X = jnp.array(ll)
-        y = jnp.array(nl)
+        X = jnp.float32(ll)
+        y = jnp.float32(nl)
         metrics = eval_step(state, X, y)
         batch_metrics.append(metrics)
     batch_metrics_np = jax.device_get(
@@ -100,13 +98,13 @@ def plot_pred(params, X, y, name="prediction.png"):
     print("PSNR:", np.mean(psnr(y, y_pred)))
     print("SSIM:", np.mean(ssim(y, y_pred)))
     plt.subplot(1, 3, 1)
-    plt.imshow(X[0])
+    plt.imshow(X[0].astype(jnp.uint8))
     plt.title("Low light")
     plt.subplot(1, 3, 2)
-    plt.imshow(y[0])
+    plt.imshow(y[0].astype(jnp.uint8))
     plt.title("Normal light")
     plt.subplot(1, 3, 3)
-    plt.imshow(y_pred[0])
+    plt.imshow(y_pred[0].astype(jnp.uint8))
     plt.title("Prediction")
     plt.savefig(name)
 
@@ -141,12 +139,11 @@ def main():
     for img_in, img_tar in train_loader.take(1):
         first_ll, first_nl = img_in, img_tar
 
-    first_ll = jnp.array(first_ll)
-    first_nl = jnp.array(first_nl)
+    first_ll = jnp.float32(first_ll)
+    first_nl = jnp.float32(first_nl)
     plot_pred(train_state.params, first_ll, first_nl, name="before_training.png")
-
     num_steps_per_epoch = train_loader.cardinality().numpy() // num_epochs
-
+    print(num_steps_per_epoch)
     metrics_history = {
         "train_loss": [],
         "train_psnr": [],
@@ -158,13 +155,15 @@ def main():
     batch_metrics = []
 
     for step, (ll, nl) in tqdm(enumerate(train_loader.as_numpy_iterator())):
-        X = jnp.array(ll)
-        y = jnp.array(nl)
+        X = jnp.float32(ll)
+        y = jnp.float32(nl)
         train_state, metrics = train_step(train_state, X, y)
         batch_metrics.append(metrics)
 
-        if (step + 1) % num_steps_per_epoch == 0:  # one training epoch has passed
-            epoch = (step + 1) // num_steps_per_epoch
+        epoch = (step + 1) // num_steps_per_epoch
+        if (
+            epoch > 0 and (step + 1) % num_steps_per_epoch == 0
+        ):  # one training epoch has passed
             # Aggregate the metrics
             batch_metrics_np = jax.device_get(
                 batch_metrics
@@ -189,12 +188,14 @@ def main():
             print(
                 f"train epoch: {epoch}, "
                 f"loss: {metrics_history['train_loss'][-1]}, "
-                f"accuracy: {metrics_history['train_accuracy'][-1] * 100}"
+                f"PSNR: {metrics_history['train_psnr'][-1]}, "
+                f"SSIM: {metrics_history['train_ssim'][-1]}"
             )
             print(
                 f"test epoch: {epoch}, "
                 f"loss: {metrics_history['test_loss'][-1]}, "
-                f"accuracy: {metrics_history['test_accuracy'][-1] * 100}"
+                f"PSNR: {metrics_history['test_psnr'][-1]}, "
+                f"SSIM: {metrics_history['test_ssim'][-1]}"
             )
             ckpt = {"model": train_state}
             if checkpoint_manager.save(
