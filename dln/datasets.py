@@ -1,11 +1,14 @@
 import os
+import random
 import time
+
+import cv2
 import tensorflow as tf
 import numpy as np
 
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from PIL import Image, ImageEnhance
 
-from dln.preprocess import get_patch, augment
+from dln.preprocess import augment, get_patch, load_img
 
 
 class VOC2007:
@@ -27,37 +30,42 @@ class VOC2007:
         return len(self.image_filenames)
 
     def __call__(self, index):
-        ori_img = load_img(self.image_filenames[index])
-        ori_img = img_to_array(ori_img)
-        width, height = ori_img.shape[1], ori_img.shape[0]
+        ori_img = load_img(self.image_filenames[index])  # PIL image
+        width, height = ori_img.size
         ratio = min(width, height) / 384
-        newWidth, newHeight = int(width / ratio), int(height / ratio)
-        ori_img = tf.image.resize(
-            ori_img, [newHeight, newWidth], method=tf.image.ResizeMethod.LANCZOS3
-        )
+
+        newWidth = int(width / ratio)
+        newHeight = int(height / ratio)
+        ori_img = ori_img.resize((newWidth, newHeight), Image.LANCZOS)
 
         high_image = ori_img
 
-        color_dim_factor = 0.3 * np.random.random() + 0.7
-        contrast_dim_factor = 0.3 * np.random.random() + 0.7
-        ori_img = tf.image.adjust_saturation(ori_img, color_dim_factor)
-        ori_img = tf.image.adjust_contrast(ori_img, contrast_dim_factor)
+        ## color and contrast *dim*
+        color_dim_factor = 0.3 * random.random() + 0.7
+        contrast_dim_factor = 0.3 * random.random() + 0.7
+        ori_img = ImageEnhance.Color(ori_img).enhance(color_dim_factor)
+        ori_img = ImageEnhance.Contrast(ori_img).enhance(contrast_dim_factor)
 
-        low_img = ori_img / 255.0
+        ori_img = cv2.cvtColor((np.asarray(ori_img)), cv2.COLOR_RGB2BGR)  # cv2 image
+        ori_img = (ori_img.clip(0, 255)).astype("uint8")
+        low_img = ori_img.astype("double") / 255.0
 
-        beta = 0.5 * np.random.random() + 0.5
-        alpha = 0.1 * np.random.random() + 0.9
-        gamma = 3.5 * np.random.random() + 1.5
-        low_img = beta * tf.pow(alpha * low_img, gamma)
+        # generate low-light image
+        beta = 0.5 * random.random() + 0.5
+        alpha = 0.1 * random.random() + 0.9
+        gamma = 3.5 * random.random() + 1.5
+        low_img = beta * np.power(alpha * low_img, gamma)
+
         low_img = low_img * 255.0
-        low_img = tf.clip_by_value(low_img, 0, 255)
+        low_img = (low_img.clip(0, 255)).astype("uint8")
+        low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
 
         img_in, img_tar = get_patch(
             low_img, high_image, self.patch_size, self.upscale_factor
         )
 
         if self.data_augmentation:
-            img_in, img_tar = augment(img_in, img_tar)
+            img_in, img_tar, _ = augment(img_in, img_tar)
 
         if self.transform:
             img_in = self.transform(img_in)
@@ -86,16 +94,14 @@ class LOL:
 
     def __call__(self, index):
         low_img = load_img(self.image_filenames[index])
-        low_img = img_to_array(low_img)
         high_image = load_img(self.image_filenames[index].replace("low", "high"))
-        high_image = img_to_array(high_image)
 
         img_in, img_tar = get_patch(
             low_img, high_image, self.patch_size, self.upscale_factor
         )
 
         if self.data_augmentation:
-            img_in, img_tar = augment(img_in, img_tar)
+            img_in, img_tar, _ = augment(img_in, img_tar)
 
         if self.transform:
             img_in = self.transform(img_in)
@@ -116,25 +122,10 @@ def get_dataset(
         img_folder, patch_size, upscale_factor, data_augmentation, transform
     )
     indices = list(range(len(dataset)))
-
-    def gen():
-        for index in indices:
-            img_in, img_tar = dataset(index)
-            img_in = tf.image.resize(img_in, [patch_size, patch_size])
-            img_tar = tf.image.resize(
-                img_tar, [patch_size * upscale_factor, patch_size * upscale_factor]
-            )
-            yield img_in, img_tar
-
-    tf_dataset = tf.data.Dataset.from_generator(
-        gen,
-        output_signature=(
-            tf.TensorSpec(shape=(patch_size, patch_size, 3), dtype=tf.float32),
-            tf.TensorSpec(
-                shape=(patch_size * upscale_factor, patch_size * upscale_factor, 3),
-                dtype=tf.float32,
-            ),
-        ),
+    tf_dataset = tf.data.Dataset.from_tensor_slices(indices)
+    tf_dataset = tf_dataset.map(
+        lambda x: tf.numpy_function(dataset, [x], [tf.uint8, tf.uint8]),
+        num_parallel_calls=tf.data.AUTOTUNE,
     )
 
     return tf_dataset

@@ -1,6 +1,11 @@
 import tensorflow as tf
-import numpy as np
 import random
+from PIL import Image, ImageOps
+
+
+def load_img(filepath):
+    img = Image.open(filepath).convert("RGB")
+    return img
 
 
 def rescale_img(img, scale):
@@ -13,8 +18,10 @@ def rescale_img(img, scale):
 
 
 def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):
-    ih, iw, _ = img_in.shape
-    tp = scale * patch_size
+    (ih, iw) = img_in.size
+
+    patch_mult = scale
+    tp = patch_mult * patch_size
     ip = tp // scale
 
     if ix == -1:
@@ -22,25 +29,29 @@ def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):
     if iy == -1:
         iy = random.randrange(0, ih - ip + 1)
 
-    tx, ty = ix * scale, iy * scale
+    (tx, ty) = (scale * ix, scale * iy)
 
-    img_in = img_in[iy : iy + ip, ix : ix + ip]
-    img_tar = img_tar[ty : ty + tp, tx : tx + tp]
-
+    img_in = img_in.crop((ty, tx, ty + tp, tx + tp))
+    img_tar = img_tar.crop((ty, tx, ty + tp, tx + tp))
     return img_in, img_tar
 
 
 def augment(img_in, img_tar, flip_h=True, rot=True):
-    if flip_h and random.random() < 0.5:
-        img_in = tf.image.flip_left_right(img_in)
-        img_tar = tf.image.flip_left_right(img_tar)
+    info_aug = {"flip_h": False, "flip_v": False, "trans": False}
+
+    if random.random() < 0.5 and flip_h:
+        img_in = ImageOps.flip(img_in)
+        img_tar = ImageOps.flip(img_tar)
+        info_aug["flip_h"] = True
 
     if rot:
         if random.random() < 0.5:
-            img_in = tf.image.flip_up_down(img_in)
-            img_tar = tf.image.flip_up_down(img_tar)
+            img_in = ImageOps.mirror(img_in)
+            img_tar = ImageOps.mirror(img_tar)
+            info_aug["flip_v"] = True
         if random.random() < 0.5:
-            img_in = tf.image.rot90(img_in, k=2)
-            img_tar = tf.image.rot90(img_tar, k=2)
+            img_in = img_in.rotate(180)
+            img_tar = img_tar.rotate(180)
+            info_aug["trans"] = True
 
-    return img_in, img_tar
+    return img_in, img_tar, info_aug
