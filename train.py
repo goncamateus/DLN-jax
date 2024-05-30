@@ -71,8 +71,8 @@ def evaluate_model(state, batch_size):
     )
     batch_metrics = []
     for ll, nl in test_ds.as_numpy_iterator():
-        X = jnp.array(ll) / 255.0
-        y = jnp.array(nl) / 255.0
+        X = jnp.array(ll)
+        y = jnp.array(nl)
         metrics = eval_step(state, X, y)
         batch_metrics.append(metrics)
     batch_metrics_np = jax.device_get(
@@ -158,8 +158,8 @@ def main():
     batch_metrics = []
 
     for step, (ll, nl) in tqdm(enumerate(train_loader.as_numpy_iterator())):
-        X = jnp.array(ll) / 255.0
-        y = jnp.array(nl) / 255.0
+        X = jnp.array(ll)
+        y = jnp.array(nl)
         train_state, metrics = train_step(train_state, X, y)
         batch_metrics.append(metrics)
 
