@@ -126,10 +126,10 @@ def plot_pred(params, X, y, name="prediction.png"):
 
 
 def main():
+    seed = int(time.time())
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
-    dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{int(time.time())}/"
+    dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
 
-    seed = 0  # needless to say these should be in a config or defined like flags
     learning_rate = 1e-3
     num_epochs = 10
     batch_size = 12
