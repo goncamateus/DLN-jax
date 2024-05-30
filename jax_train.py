@@ -56,12 +56,12 @@ def eval_step(state, X, y):
     return compute_metrics(y_pred=nl_pred, y=y)
 
 
-def train_one_epoch(state, data_loader, train_steps):
+def train_one_epoch(state, train_set, batch_size):
     """Train for 1 epoch on the training set."""
+    data_loader = jnp_data_loader(train_set, batch_size=batch_size)
+    train_steps = len(train_set) // batch_size
     batch_metrics = []
     for X, y in tqdm(data_loader, total=train_steps):
-        state, metrics = train_step(state, X, y)
-        batch_metrics.append(metrics)
         state, metrics = train_step(state, X, y)
         batch_metrics.append(metrics)
 
@@ -69,7 +69,6 @@ def train_one_epoch(state, data_loader, train_steps):
     batch_metrics_np = jax.device_get(
         batch_metrics
     )  # pull from the accelerator onto host (CPU)
-    import ipdb; ipdb.set_trace()
     epoch_metrics_np = {
         k: np.mean([metrics[k] for metrics in batch_metrics_np])
         for k in batch_metrics_np[0]
@@ -126,7 +125,8 @@ def plot_pred(params, X, y, name="prediction.png"):
 
 
 def main():
-    dln_chkpts = f"DLN-{int(time.time())}/"
+    abs_folder_path = os.path.dirname(os.path.abspath(__file__))
+    dln_chkpts = f"{abs_folder_path}/DLN-{int(time.time())}/"
 
     seed = 0  # needless to say these should be in a config or defined like flags
     learning_rate = 1e-3
@@ -145,26 +145,24 @@ def main():
 
     train_set, test_set = get_datasets()
     data_loader = jnp_data_loader(train_set, batch_size=batch_size)
-    train_steps = len(train_set) // batch_size
     first_ll, first_nl = next(data_loader)
+    del data_loader
 
     plot_pred(train_state.params, first_ll, first_nl, name="before_training.png")
 
     for epoch in range(1, num_epochs + 1):
-        train_state, train_metrics = train_one_epoch(
-            train_state, data_loader, train_steps
-        )
+        train_state, train_metrics = train_one_epoch(train_state, train_set, batch_size)
         print(
             f"Train epoch: {epoch}, loss: {train_metrics['loss']}, psnr: {train_metrics['psnr']}"
         )
-
-        test_metrics = evaluate_model(train_state, test_set, batch_size)
+        test_state = train_state
+        test_metrics = evaluate_model(test_state, test_set, batch_size)
         print(
             f"Test epoch: {epoch}, loss: {test_metrics['loss']}, psnr: {test_metrics['psnr']}"
         )
-        if epoch % 5 == 0:
-            ckpt = {"model": train_state}
-            checkpoint_manager.save(epoch, ckpt, save_kwargs={"save_args": save_args})
+        ckpt = {"model": train_state}
+        if checkpoint_manager.save(epoch, ckpt, save_kwargs={"save_args": save_args}):
+            print(f"Saved checkpoint for epoch {epoch}")
 
     plot_pred(train_state.params, first_ll, first_nl, name="after_training.png")
 
