@@ -109,7 +109,6 @@ def create_train_state(key, learning_rate):
 
 def plot_pred(state, X, y, name="prediction.png"):
     y_pred = DLN(dim=64).apply({"params": state.params}, X)
-    print("Before training:")
     print("PSNR:", np.mean(psnr(y, y_pred)))
     print("SSIM:", np.mean(ssim(y, y_pred)))
     plt.subplot(1, 3, 1)
