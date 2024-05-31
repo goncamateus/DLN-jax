@@ -62,7 +62,6 @@ def eval_step(model: DLN, metrics: nnx.MultiMetric, X, y):
 
 def plot_pred(model, X, y, name="prediction.png"):
     y_pred = model(X)
-    print("Before training:")
     print("PSNR:", np.mean(psnr(y, y_pred)))
     print("SSIM:", np.mean(ssim(y, y_pred)))
     plt.subplot(1, 3, 1)
@@ -113,7 +112,8 @@ def main():
     )
 
     first_ll, first_nl = next(train_loader.get(shuffle=False))
-
+    
+    print("Before training:")
     plot_pred(model, first_ll, first_nl, name="output/before_training.png")
     metrics_history = {
         "train_loss": [],
@@ -166,6 +166,7 @@ def main():
         end_time = time.time()
         print("Time taken for epoch: ", (end_time - epoch_time_init), "seconds")
 
+    print("After training:")
     plot_pred(model, first_ll, first_nl, name="output/after_training.png")
 
 

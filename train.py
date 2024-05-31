@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 
@@ -123,7 +124,34 @@ def plot_pred(state, X, y, name="prediction.png"):
     plt.savefig(name)
 
 
-def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description="DLN-JAX training script")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=int(time.time()),
+        help="random seed to use. Default=123",
+    )
+    parser.add_argument(
+        "--output", default="./output/", help="Location to save checkpoint models"
+    )
+    parser.add_argument(
+        "--model-folder",
+        default="DLN",
+        help="pretrained base model to load",
+    )
+    parser.add_argument(
+        "--fine-tune",
+        type=bool,
+        default=False,
+        help="fine-tune the model with LOL dataset",
+    )
+
+    args = parser.parse_args()
+    return args
+
+
+def main(seed, output_folder, fine_tune, model_folder):
     seed = int(time.time())
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
     dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
@@ -135,14 +163,21 @@ def main():
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
 
     orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    if fine_tune:
+        indexes_in_folder = sorted([int(i) for i in os.listdir(model_folder)])
+        model_folder = f"{model_folder}/{indexes_in_folder[-1]}/default"
+        chkpt = orbax_checkpointer.restore(model_folder)
+        model_dict = chkpt["model"]
+        train_state = train_state.replace(params=model_dict["params"])
+
     options = orbax.checkpoint.CheckpointManagerOptions(max_to_keep=2, create=True)
     checkpoint_manager = orbax.checkpoint.CheckpointManager(
         dln_chkpts, orbax_checkpointer, options
     )
     ckpt = {"model": train_state}
     save_args = orbax_utils.save_args_from_target(ckpt)
-
-    train_loader = VOC2007Loader(
+    data_loader = LOLLoader if fine_tune else VOC2007Loader
+    train_loader = data_loader(
         patch_size=128,
         upscale_factor=1,
         data_augmentation=True,
@@ -151,7 +186,10 @@ def main():
 
     first_ll, first_nl = next(train_loader.get(shuffle=False))
 
-    plot_pred(train_state, first_ll, first_nl, name="output/before_training.png")
+    print("Before training:")
+    plot_pred(
+        train_state, first_ll, first_nl, name=f"{output_folder}/before_training.png"
+    )
     metrics_history = {
         "train_loss": [],
         "train_psnr": [],
@@ -167,10 +205,10 @@ def main():
             metrics_history[f"train_{metric}"].append(value)
 
         test_state = train_state
-        test_loader = LOLLoader(
+        test_loader = data_loader(
             patch_size=128,
             upscale_factor=1,
-            data_augmentation=False,
+            data_augmentation=True,
             batch_size=batch_size,
             train=False,
         )
@@ -196,8 +234,12 @@ def main():
         end_time = time.time()
         print("Time taken for epoch: ", (end_time - epoch_time_init), "seconds")
 
-    plot_pred(train_state, first_ll, first_nl, name="output/after_training.png")
+    print("After training:")
+    plot_pred(
+        train_state, first_ll, first_nl, name=f"{output_folder}/after_training.png"
+    )
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args.seed, args.output, args.fine_tune, args.model_folder)
