@@ -1,4 +1,3 @@
-import tensorflow as tf
 import random
 from PIL import Image, ImageOps
 
@@ -9,11 +8,9 @@ def load_img(filepath):
 
 
 def rescale_img(img, scale):
-    img = tf.image.resize(
-        img,
-        [int(img.shape[0] * scale), int(img.shape[1] * scale)],
-        method=tf.image.ResizeMethod.BICUBIC,
-    )
+    size_in = img.size
+    new_size_in = tuple([int(x * scale) for x in size_in])
+    img = img.resize(new_size_in, resample=Image.BICUBIC)
     return img
 
 
