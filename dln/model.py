@@ -2,10 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from flax import nnx
-
-
-def prelu(x):
-    return jnp.maximum(0, x) + 0.01 * jnp.minimum(0, x)
+from flax import linen as nn
 
 
 class ConvBlock(nnx.Module):
@@ -34,8 +31,10 @@ class ConvBlock(nnx.Module):
         )
 
     def __call__(self, x, training: bool = True):
-        def prelu(x):
-            return jnp.maximum(0, x) + 0.01 * jnp.minimum(0, x)
+        def prelu(inputs):
+            return jnp.where(
+                inputs >= 0, inputs, jnp.asarray(0.01, inputs.dtype) * inputs
+            )
 
         x = self.conv(x)
         if self.use_bn:
@@ -64,14 +63,14 @@ class FA(nnx.Module):
     def __call__(self, x):
         b, w, h, c = x.shape
         avg_pool = jnp.mean(x, axis=(1, 2), keepdims=True)
-        y = jnp.reshape(avg_pool, (b, c))
-        y = self.linear_1(y)
-        y = jax.nn.relu(y)
-        y = self.linear_2(y)
-        y = jax.nn.sigmoid(y)
-        expanded = jnp.reshape(y, (b, 1, 1, c))
-        y = jnp.broadcast_to(expanded, (b, w, h, c))
-        weights = x * y
+        squeezed = jnp.reshape(avg_pool, (b, c))
+        double_fc = self.linear_1(squeezed)
+        double_fc = nnx.relu(double_fc)
+        double_fc = self.linear_2(double_fc)
+        double_fc = nnx.sigmoid(double_fc)
+        to_expand = jnp.reshape(double_fc, (b, 1, 1, c))
+        expand = jnp.broadcast_to(to_expand, (b, w, h, c))
+        weights = x * expand
         recalibration = x + weights
         digesting = self.conv_block(recalibration)
         return digesting
@@ -101,7 +100,7 @@ class LightenBlock(nnx.Module):
             use_bn=False,
             use_bias=True,
         )
-        self.decoder = ConvBlock(
+        self.normal_light = ConvBlock(
             rngs,
             codedim,
             output_size,
@@ -113,11 +112,10 @@ class LightenBlock(nnx.Module):
         )
 
     def __call__(self, x):
-        encoded = self.encoder(x)
-        offset = self.offset(encoded)
-        residual = encoded + offset
-        normal_light = self.decoder(residual)
-        return normal_light
+        encode = self.encoder(x)
+        offset = self.offset(encode)
+        residual_add = encode + offset
+        return self.normal_light(residual_add)
 
 
 class DarkenBlock(nnx.Module):
@@ -152,7 +150,7 @@ class DarkenBlock(nnx.Module):
             use_bn=False,
             use_bias=True,
         )
-        self.decoder = ConvBlock(
+        self.low_light = ConvBlock(
             rngs,
             codedim,
             output_size,
@@ -164,11 +162,10 @@ class DarkenBlock(nnx.Module):
         )
 
     def __call__(self, x):
-        encoded = self.encoder(x)
-        offset = self.offset(encoded)
-        residual = encoded - offset
-        low_light = self.decoder(residual)
-        return low_light
+        encode = self.encoder(x)
+        offset = self.offset(encode)
+        residual_sub = encode - offset
+        return self.low_light(residual_sub)
 
 
 class LBP(nnx.Module):
@@ -182,10 +179,10 @@ class LBP(nnx.Module):
             rngs, output_size, output_size, kernel_size, stride, padding
         )
         self.lambda_1 = ConvBlock(
-            rngs, output_size, output_size, 1, 1, 0, use_bias=True
+            rngs, output_size, output_size, (1, 1), (1, 1), 0, use_bias=True
         )
         self.lambda_2 = ConvBlock(
-            rngs, output_size, output_size, 1, 1, 0, use_bias=True
+            rngs, output_size, output_size, (1, 1), (1, 1), 0, use_bias=True
         )
         self.lighten_2 = LightenBlock(
             rngs, output_size, output_size, kernel_size, stride, padding
@@ -208,19 +205,19 @@ class DLN(nnx.Module):
     def __init__(self, rngs, input_dim, dim):
         in_net_dim = input_dim + 1
 
-        self.feat1 = ConvBlock(rngs, in_net_dim, 2 * dim, 3, 1, 1)
-        self.feat2 = ConvBlock(rngs, 2 * dim, dim, 3, 1, 1)
-        self.lbp_1 = LBP(rngs, dim, dim, 3, 1, 1)
-        self.lbp_2 = LBP(rngs, 2 * dim, dim, 3, 1, 1)
-        self.lbp_3 = LBP(rngs, 3 * dim, dim, 3, 1, 1)
-        self.residual = ConvBlock(rngs, 4 * dim, dim, 3, 1, 1)
+        self.feat1 = ConvBlock(rngs, in_net_dim, 2 * dim, (3, 3), (1, 1), (1, 1))
+        self.feat2 = ConvBlock(rngs, 2 * dim, dim, (3, 3), (1, 1), (1, 1))
+        self.lbp_1 = LBP(rngs, dim, dim, (3, 3), (1, 1), (1, 1))
+        self.lbp_2 = LBP(rngs, 2 * dim, dim, (3, 3), (1, 1), (1, 1))
+        self.lbp_3 = LBP(rngs, 3 * dim, dim, (3, 3), (1, 1), (1, 1))
+        self.residual = ConvBlock(rngs, 4 * dim, dim, (3, 3), (1, 1), (1, 1))
         self.out = nnx.Conv(
             rngs=rngs,
             in_features=dim,
             out_features=3,
-            kernel_size=3,
-            strides=1,
-            padding=1,
+            kernel_size=(3, 3),
+            strides=(1, 1),
+            padding=(1, 1),
             kernel_init=nnx.initializers.kaiming_normal(),
             bias_init=nnx.initializers.zeros,
         )
