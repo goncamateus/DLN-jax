@@ -10,7 +10,6 @@ import orbax.checkpoint
 from PIL import Image
 
 from torchvision import transforms
-from tqdm import tqdm
 
 
 from dln.model import DLN
@@ -21,7 +20,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 def parse_args():
     parser = argparse.ArgumentParser(description="PyTorch Super Res Example")
     parser.add_argument("--gpus", default=1, type=int, help="number of gpu")
-    parser.add_argument("--image-dataset", type=str, default="test_img")
+    parser.add_argument("--image-dataset", type=str, default="datasets/test/LOL/low/")
     parser.add_argument(
         "--output", default="./output/", help="Location to save checkpoint models"
     )
@@ -71,21 +70,22 @@ def eval_step(params, X):
 def eval_over_images(LL_images, pred_images, model_params):
     time_ave = 0
     trans = transforms.ToTensor()
-    for i in tqdm(range(len(LL_images))):
+    for i in range(len(LL_images)):
         LL_in = Image.open(LL_images[i]).convert("RGB")
         LL_torch = trans(LL_in).permute(1, 2, 0).unsqueeze(0)
         LL = jnp.array(LL_torch)
         t0 = time.time()
         nl_pred = eval_step(model_params, LL)
         t1 = time.time()
-        time_ave += t1 - t0
-        # save images
-        nl_pred = nl_pred * 255.0
+        if i != 0:  # skip the first image count due to gpu loading time
+            time_ave += t1 - t0
+        nl_pred = nl_pred * 255
         nl_pred = nl_pred.clip(0, 255)
-        Image.fromarray(np.uint8(nl_pred)).save(pred_images[i])
+        nl_pred = np.array(nl_pred, dtype=np.uint8).squeeze()
+        Image.fromarray(nl_pred).save(pred_images[i])
         print(
             "===> Processing Image: %04d /%04d in %.4f s."
-            % (i, len(LL_images), (t1 - t0))
+            % (i + 1, len(LL_images), (t1 - t0))
         )
     print("===> Processing Time: %.4f ms." % (time_ave / len(LL_images) * 1000))
 
