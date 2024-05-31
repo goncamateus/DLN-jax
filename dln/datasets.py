@@ -1,35 +1,42 @@
 import os
 import random
-import time
 
 import cv2
-import tensorflow as tf
 import numpy as np
+import torch.utils.data as data
 
 from PIL import Image, ImageEnhance
+
 
 from dln.preprocess import augment, get_patch, load_img
 
 
-class VOC2007:
+class VOC2007(data.Dataset):
     def __init__(
         self, img_folder, patch_size, upscale_factor, data_augmentation, transform=None
     ):
-        self.img_folder = img_folder
+        super(VOC2007, self).__init__()
+        self.imgFolder = img_folder
         self.image_filenames = [
-            os.path.join(self.img_folder, x)
-            for x in os.listdir(self.img_folder)
-            if x.endswith((".png", ".jpg", ".jpeg"))
+            os.path.join(self.imgFolder, x)
+            for x in os.listdir(self.imgFolder)
+            if self.is_image_file(x)
         ]
+
+        self.image_filenames = self.image_filenames
         self.patch_size = patch_size
         self.upscale_factor = upscale_factor
         self.transform = transform
         self.data_augmentation = data_augmentation
 
-    def __len__(self):
-        return len(self.image_filenames)
+    def is_image_file(self, filename):
+        return any(
+            filename.endswith(extension)
+            for extension in [".bmp", ".png", ".jpg", ".jpeg"]
+        )
 
-    def __call__(self, index):
+    def __getitem__(self, index):
+
         ori_img = load_img(self.image_filenames[index])  # PIL image
         width, height = ori_img.size
         ratio = min(width, height) / 384
@@ -73,11 +80,15 @@ class VOC2007:
 
         return img_in, img_tar
 
+    def __len__(self):
+        return len(self.image_filenames)
 
-class LOL:
+
+class LOL(data.Dataset):
     def __init__(
         self, img_folder, patch_size, upscale_factor, data_augmentation, transform=None
     ):
+        super(LOL, self).__init__()
         self.img_folder = img_folder
         self.image_filenames = [
             os.path.join(self.img_folder, x)
@@ -92,7 +103,7 @@ class LOL:
     def __len__(self):
         return len(self.image_filenames)
 
-    def __call__(self, index):
+    def __getitem__(self, index):
         low_img = load_img(self.image_filenames[index])
         high_image = load_img(self.image_filenames[index].replace("low", "high"))
 
@@ -108,80 +119,3 @@ class LOL:
             img_tar = self.transform(img_tar)
 
         return img_in, img_tar
-
-
-def get_dataset(
-    dataset_type,
-    img_folder,
-    patch_size,
-    upscale_factor,
-    data_augmentation,
-    transform=None,
-):
-    dataset = dataset_type(
-        img_folder, patch_size, upscale_factor, data_augmentation, transform
-    )
-    indices = list(range(len(dataset)))
-    tf_dataset = tf.data.Dataset.from_tensor_slices(indices)
-    tf_dataset = tf_dataset.map(
-        lambda x: tf.numpy_function(dataset, [x], [tf.uint8, tf.uint8]),
-        num_parallel_calls=tf.data.AUTOTUNE,
-    )
-
-    return tf_dataset
-
-
-if __name__ == "__main__":
-    # Usage example:
-    img_folder = "../datasets/train/LOL/low/"
-    # Parameters
-    patch_size = 128
-    upscale_factor = 1
-    data_augmentation = True
-    batch_size = 32
-    num_epochs = 1
-    shuffle_buffer_size = 1024
-    prefetch_buffer_size = tf.data.AUTOTUNE  # Automatically tune prefetch buffer size
-    num_parallel_calls = (
-        tf.data.AUTOTUNE
-    )  # Automatically tune the number of parallel calls
-
-    # Create the dataset
-    tf_dataset = get_dataset(
-        LOL, img_folder, patch_size, upscale_factor, data_augmentation
-    )
-
-    tf_dataset_parallel = (
-        tf_dataset.shuffle(shuffle_buffer_size)
-        .repeat(num_epochs)
-        .batch(batch_size, drop_remainder=True)
-        .map(
-            lambda img_in, img_tar: (img_in, img_tar),
-            num_parallel_calls=num_parallel_calls,
-        )
-        .prefetch(prefetch_buffer_size)
-    )
-
-    # Measure the time for processing the dataset with parallel loading
-    start_time = time.time()
-    for img_in, img_tar in tf_dataset_parallel:
-        pass
-    end_time = time.time()
-
-    print(
-        f"Time with parallel loading and prefetching: {end_time - start_time:.2f} seconds"
-    )
-
-    # Apply transformations without parallel loading and prefetching
-    dataset = tf_dataset.shuffle(shuffle_buffer_size).repeat(num_epochs)
-    data_loader = dataset.batch(batch_size, drop_remainder=True).prefetch(1)
-
-    # Measure the time for processing the dataset without parallel loading
-    start_time = time.time()
-    for img_in, img_tar in data_loader:
-        pass
-    end_time = time.time()
-
-    print(
-        f"Time without parallel loading and prefetching: {end_time - start_time:.2f} seconds"
-    )
