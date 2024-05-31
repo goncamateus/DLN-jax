@@ -136,7 +136,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model-folder",
-        default="DLN",
+        default="DLN-MODEL",
         help="pretrained base model to load",
     )
     parser.add_argument(
@@ -156,7 +156,7 @@ def main(seed, output_folder, fine_tune, model_folder):
     dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 100
+    num_epochs = 500 if fine_tune else 100
     batch_size = 12
 
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
