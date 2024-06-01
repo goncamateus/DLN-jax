@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import optax
 import orbax.checkpoint
+import wandb
 
 from dm_pix import ssim
 from dm_pix import psnr
@@ -152,11 +153,20 @@ def parse_args():
 
 def main(seed, output_folder, fine_tune, model_folder):
     seed = int(time.time())
+    name = f"JAX-{seed}-{'LOL' if fine_tune else 'VOC'}"
+    wandb.init(
+        project="DLN",
+        name=name,
+        entity="goncamateus",
+        config={"seed": seed},
+        save_code=True,
+    )
+
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
     dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 500 if fine_tune else 100
+    num_epochs = 2 if fine_tune else 100
     batch_size = 12
 
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
@@ -215,6 +225,8 @@ def main(seed, output_folder, fine_tune, model_folder):
         for metric, value in test_metrics.items():
             metrics_history[f"test_{metric}"].append(value)
 
+        log_dict = {f"{k}": v[-1] for k, v in metrics_history.items()}
+        wandb.log(log_dict)
         print(
             f"train epoch: {epoch}, "
             f"loss: {metrics_history['train_loss'][-1]}, "
@@ -227,9 +239,23 @@ def main(seed, output_folder, fine_tune, model_folder):
             f"PSNR: {metrics_history['test_psnr'][-1]}, "
             f"SSIM: {metrics_history['test_ssim'][-1]}"
         )
-        ckpt = {"model": train_state}
-        if checkpoint_manager.save(epoch, ckpt, save_kwargs={"save_args": save_args}):
-            print(f"Saved checkpoint for epoch {epoch}")
+        if epoch % 10 == 0:
+            ckpt = {"model": train_state}
+            if checkpoint_manager.save(
+                epoch, ckpt, save_kwargs={"save_args": save_args}
+            ):
+                print(f"Saved checkpoint for epoch {epoch}")
+                artifact = wandb.Artifact(
+                    f"epoch-{epoch}",
+                    type="model",
+                    metadata={
+                        "loss": metrics_history["test_loss"][-1],
+                        "PSNR": metrics_history["test_psnr"][-1],
+                        "SSIM": metrics_history["test_ssim"][-1],
+                    },
+                )
+                artifact.add_dir(f"{dln_chkpts}/{epoch}")
+                wandb.run.log_artifact(artifact)
         end_time = time.time()
         print("Time taken for epoch: ", (end_time - epoch_time_init), "seconds")
 
@@ -237,6 +263,7 @@ def main(seed, output_folder, fine_tune, model_folder):
     plot_pred(
         train_state, first_ll, first_nl, name=f"{output_folder}/after_training.png"
     )
+    wandb.log({"Result Image": wandb.Image(f"{output_folder}/after_training.png")})
 
 
 if __name__ == "__main__":
