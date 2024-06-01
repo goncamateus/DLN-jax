@@ -179,7 +179,7 @@ def main(seed, output_folder, fine_tune, model_folder):
         model_dict = chkpt["model"]
         train_state = train_state.replace(params=model_dict["params"])
 
-    options = orbax.checkpoint.CheckpointManagerOptions(max_to_keep=2, create=True)
+    options = orbax.checkpoint.CheckpointManagerOptions(max_to_keep=10, create=True)
     checkpoint_manager = orbax.checkpoint.CheckpointManager(
         dln_chkpts, orbax_checkpointer, options
     )
