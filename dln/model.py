@@ -20,7 +20,7 @@ class ConvBlock(nn.Module):
             strides=self.stride,
             padding=self.padding,
             use_bias=self.use_bias,
-            # kernel_init=nn.initializers.kaiming_normal(), <--- DA UM RESULTADO HORRIVEL
+            kernel_init=nn.initializers.kaiming_normal(),
             bias_init=nn.initializers.constant(0.0) if self.use_bias else None,
         )(x)
         if self.use_bn:
@@ -138,8 +138,9 @@ class LBP(nn.Module):
             self.padding,
             use_bias=True,
         )(
-            ll_est - lambda_1
+            lambda_1 - ll_est
         )  # Original code was lambda_1 - ll_est but paper is this way i wrote
+        # (01/06) just changed ll_est - lambda_1 to try
         y_est = lambda_2 + nl_est_2
         return y_est
 
@@ -174,7 +175,7 @@ class DLN(nn.Module):
             kernel_size=3,
             strides=1,
             padding=1,
-            # kernel_init=nn.initializers.kaiming_normal(), <--- DA UM RESULTADO HORRIVEL
+            kernel_init=nn.initializers.kaiming_normal(),
         )(residual_1)
         nl_pred = inputs + residual_2
         return nl_pred
