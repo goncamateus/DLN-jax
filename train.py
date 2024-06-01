@@ -163,7 +163,7 @@ def main(seed, output_folder, fine_tune, model_folder):
     )
 
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
-    dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
+    dln_chkpts = f"{abs_folder_path}/models/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
     num_epochs = 2 if fine_tune else 100
