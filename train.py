@@ -166,7 +166,7 @@ def main(seed, output_folder, fine_tune, model_folder):
     dln_chkpts = f"{abs_folder_path}/models/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 2 if fine_tune else 100
+    num_epochs = 500 if fine_tune else 100
     batch_size = 12
 
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
