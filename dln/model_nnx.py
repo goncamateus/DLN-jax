@@ -1,8 +1,6 @@
-import jax
 import jax.numpy as jnp
 
 from flax import nnx
-from flax import linen as nn
 
 
 class ConvBlock(nnx.Module):
@@ -26,7 +24,7 @@ class ConvBlock(nnx.Module):
             padding=padding,
             use_bias=use_bias,
             rngs=rngs,
-            # kernel_init=nnx.initializers.kaiming_normal(),
+            kernel_init=nnx.initializers.kaiming_normal(),
             bias_init=nnx.initializers.constant(0.0),
         )
 
@@ -218,7 +216,7 @@ class DLN(nnx.Module):
             kernel_size=(3, 3),
             strides=(1, 1),
             padding=(1, 1),
-            # kernel_init=nnx.initializers.kaiming_normal(),
+            kernel_init=nnx.initializers.kaiming_normal(),
         )
 
     def __call__(self, x, training: bool = True):

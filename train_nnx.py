@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 
@@ -6,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import optax
 import orbax.checkpoint
-import tensorflow as tf
+import wandb
 
 from dm_pix import ssim
 from dm_pix import psnr
@@ -76,20 +77,53 @@ def plot_pred(model, X, y, name="prediction.png"):
     plt.savefig(name)
 
 
-def main():
-    tf.random.set_seed(0)
+def parse_args():
+    parser = argparse.ArgumentParser(description="DLN-JAX training script")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=int(time.time()),
+        help="random seed to use. Default=123",
+    )
+    parser.add_argument(
+        "--output", default="./output/", help="Location to save checkpoint models"
+    )
+    parser.add_argument(
+        "--model-folder",
+        default="DLN-MODEL",
+        help="pretrained base model to load",
+    )
+    parser.add_argument(
+        "--fine-tune",
+        type=bool,
+        default=False,
+        help="fine-tune the model with LOL dataset",
+    )
 
+    args = parser.parse_args()
+    return args
+
+
+def main(seed, output_folder, fine_tune, model_folder):
     seed = int(time.time())
+    name = f"JAX-{seed}-{'LOL' if fine_tune else 'VOC'}"
+    wandb.init(
+        project="DLN",
+        name=name,
+        entity="goncamateus",
+        config={"seed": seed},
+        save_code=True,
+    )
+
     abs_folder_path = os.path.dirname(os.path.abspath(__file__))
-    dln_chkpts = f"{abs_folder_path}/DLN-MODEL-{seed}/"
+    dln_chkpts = f"{abs_folder_path}/models/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 2
+    num_epochs = 500
     batch_size = 12
 
     model = DLN(nnx.Rngs(0), input_dim=3, dim=64)
-    momentum = 0.9
-    optimizer = nnx.Optimizer(model, optax.adamw(learning_rate, momentum))
+    optimizer = nnx.Optimizer(model, optax.adam(learning_rate))
     metrics = nnx.MultiMetric(
         psnr=nnx.metrics.Average("psnr"),
         ssim=nnx.metrics.Average("ssim"),
@@ -103,8 +137,9 @@ def main():
     )
     ckpt = {"model": model}
     save_args = orbax_utils.save_args_from_target(ckpt)
+    data_loader = LOLLoader if fine_tune else VOC2007Loader
 
-    train_loader = VOC2007Loader(
+    train_loader = data_loader(
         patch_size=128,
         upscale_factor=1,
         data_augmentation=True,
@@ -112,9 +147,9 @@ def main():
     )
 
     first_ll, first_nl = next(train_loader.get(shuffle=False))
-    
+
     print("Before training:")
-    plot_pred(model, first_ll, first_nl, name="output/before_training.png")
+    plot_pred(model, first_ll, first_nl, name=f"{output_folder}/before_training.png")
     metrics_history = {
         "train_loss": [],
         "train_psnr": [],
@@ -132,11 +167,11 @@ def main():
         for metric, value in metrics.compute().items():  # compute metrics
             metrics_history[f"train_{metric}"].append(value)  # record metrics
         metrics.reset()  # reset metrics for test set
-        test_loader = LOLLoader(
+        test_loader = data_loader(
             patch_size=128,
             upscale_factor=1,
-            data_augmentation=False,
-            batch_size=batch_size,
+            data_augmentation=True,
+            batch_size=3 if fine_tune else batch_size,
             train=False,
         )
         test_steps = len(test_loader) // batch_size
@@ -148,6 +183,8 @@ def main():
             metrics_history[f"test_{metric}"].append(value)
         metrics.reset()  # reset metrics for next training epoch
 
+        log_dict = {f"{k}": v[-1] for k, v in metrics_history.items()}
+        wandb.log(log_dict)
         print(
             f"train epoch: {epoch}, "
             f"loss: {metrics_history['train_loss'][-1]}, "
@@ -160,9 +197,23 @@ def main():
             f"PSNR: {metrics_history['test_psnr'][-1]}, "
             f"SSIM: {metrics_history['test_ssim'][-1]}"
         )
-        ckpt = {"model": model}
-        if checkpoint_manager.save(epoch, ckpt, save_kwargs={"save_args": save_args}):
-            print(f"Saved checkpoint for epoch {epoch}")
+        if epoch % 10 == 0:
+            ckpt = {"model": model}
+            if checkpoint_manager.save(
+                epoch, ckpt, save_kwargs={"save_args": save_args}
+            ):
+                print(f"Saved checkpoint for epoch {epoch}")
+                artifact = wandb.Artifact(
+                    f"epoch-{epoch}",
+                    type="model",
+                    metadata={
+                        "loss": metrics_history["test_loss"][-1],
+                        "PSNR": metrics_history["test_psnr"][-1],
+                        "SSIM": metrics_history["test_ssim"][-1],
+                    },
+                )
+                artifact.add_dir(f"{dln_chkpts}/{epoch}")
+                wandb.run.log_artifact(artifact)
         end_time = time.time()
         print("Time taken for epoch: ", (end_time - epoch_time_init), "seconds")
 
