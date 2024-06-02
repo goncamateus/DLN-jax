@@ -84,10 +84,12 @@ def eval_step(state, X, y):
 def evaluate_model(state, data_loader):
     """Evaluate on the validation set."""
     batch_metrics = []
-    test_steps = len(data_loader) // data_loader.batch_size
-    for X, y in tqdm(data_loader.get(), total=test_steps):
+    test_steps = 5
+    for i, (X, y) in tqdm(enumerate(data_loader.get()), total=test_steps):
         metrics = eval_step(state, X, y)
         batch_metrics.append(metrics)
+        if i == test_steps:
+            break
     # Aggregate the metrics
     batch_metrics_np = jax.device_get(
         batch_metrics
@@ -166,7 +168,7 @@ def main(seed, output_folder, fine_tune, model_folder):
     dln_chkpts = f"{abs_folder_path}/models/DLN-MODEL-{seed}/"
 
     learning_rate = 1e-3
-    num_epochs = 500 if fine_tune else 100
+    num_epochs = 500
     batch_size = 12
 
     train_state = create_train_state(jax.random.PRNGKey(seed), learning_rate)
@@ -218,7 +220,7 @@ def main(seed, output_folder, fine_tune, model_folder):
             patch_size=128,
             upscale_factor=1,
             data_augmentation=True,
-            batch_size=batch_size,
+            batch_size=3 if fine_tune else batch_size,
             train=False,
         )
         test_metrics = evaluate_model(test_state, test_loader)
