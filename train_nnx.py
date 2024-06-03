@@ -106,7 +106,7 @@ def parse_args():
 
 def main(seed, output_folder, fine_tune, model_folder):
     seed = int(time.time())
-    name = f"JAX-{seed}-{'LOL' if fine_tune else 'VOC'}"
+    name = f"NNX-{seed}-{'LOL' if fine_tune else 'VOC'}"
     wandb.init(
         project="DLN",
         name=name,
@@ -131,6 +131,12 @@ def main(seed, output_folder, fine_tune, model_folder):
     )
 
     orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    if fine_tune:
+        indexes_in_folder = sorted([int(i) for i in os.listdir(model_folder)])
+        model_folder = f"{model_folder}/{indexes_in_folder[-1]}/default"
+        chkpt = orbax_checkpointer.restore(model_folder)
+        model = chkpt["model"]
     options = orbax.checkpoint.CheckpointManagerOptions(max_to_keep=2, create=True)
     checkpoint_manager = orbax.checkpoint.CheckpointManager(
         dln_chkpts, orbax_checkpointer, options
@@ -222,4 +228,5 @@ def main(seed, output_folder, fine_tune, model_folder):
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args.seed, args.output, args.fine_tune, args.model_folder)
