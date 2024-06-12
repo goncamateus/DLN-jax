@@ -9,6 +9,7 @@ import orbax.checkpoint
 
 from PIL import Image
 
+from flax.core import freeze, unfreeze
 from torchvision import transforms
 
 
@@ -71,7 +72,7 @@ def eval_over_images(LL_images, pred_images, model_params):
     time_ave = 0
     trans = transforms.ToTensor()
     for i in range(len(LL_images)):
-        LL_in = Image.open(LL_images[i]).convert("RGB")
+        LL_in = Image.open(LL_images[i])
         LL_torch = trans(LL_in).permute(1, 2, 0).unsqueeze(0)
         LL = jnp.array(LL_torch)
         t0 = time.time()
@@ -99,8 +100,27 @@ def load_model_params(model_folder):
     return model_params
 
 
+def count_params(params):
+    # Flatten the nested dictionary to get all parameter arrays
+    def flatten_dict(d, parent_key="", sep="."):
+        items = []
+        for k, v in d.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, dict):
+                items.extend(flatten_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
+
+    flattened_params = flatten_dict(unfreeze(params))
+    return sum(jnp.prod(jnp.array(p.shape)) for p in flattened_params.values())
+
+
 if __name__ == "__main__":
     args = parse_args()
     model_params = load_model_params(args.model_folder)
+    num_params = count_params(model_params)
+    print(f"Number of parameters in Flax model: {num_params}")
+
     LL_images, pred_images = image_paths(args.image_dataset, args.output)
     eval_over_images(LL_images, pred_images, model_params)
