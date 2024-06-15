@@ -15,20 +15,22 @@ from torchvision import transforms
 
 from dln.model import DLN
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="PyTorch Super Res Example")
-    parser.add_argument("--gpus", default=1, type=int, help="number of gpu")
-    parser.add_argument("--image-dataset", type=str, default="datasets/test/LOL/low/")
+    parser = argparse.ArgumentParser(description="JAX DLN Inference")
     parser.add_argument(
-        "--output", default="./output/", help="Location to save checkpoint models"
+        "--image-dataset",
+        type=str,
+        default="datasets/test/LOL/low/",
+        help="Path to the input images",
+    )
+    parser.add_argument(
+        "--output", default="./output/", help="Location to save the output images"
     )
     parser.add_argument(
         "--model-folder",
         default="DLN-MODEL",
-        help="sr pretrained base model",
+        help="Model folder to load the model from. Default=DLN-MODEL",
     )
 
     args = parser.parse_args()
