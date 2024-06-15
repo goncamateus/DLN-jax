@@ -4,6 +4,7 @@ Modified: Mateus G. Machado
 
 This repo provides the Jax/Flax implementation of DLN based on the [original repo](https://github.com/WangLiwen1994/DLN).
 I followed the same code structure, neural networks architecture, and hyper-parameters of the original PyTorch Code.
+My entire report is available [here](report.pdf).
 
 ## Complete Architecture - From original Repo
 The complete architecture of Deep Lighten Network (DLN) is shown as follows,
@@ -16,11 +17,27 @@ The rectangles and cubes denote the operations and feature maps respectively.
 - Download the LOL dataset and put it to "datasets/train/LOL" and "datasets/test/LOL".
 
 ### Training
-It needs to manually switch the training dataset: 
-1) first, train from the synthesized dataset, 
-2) then, load the pretrained model and train from the real dataset
+You can choose rather to fine-tune your pre-trained model or to train one from 0.
+I've made a version using flax.linen and another with flax.nnx.
+The one with flax.linen is complete with model saving, wandb tracking fully working etc etc.
+I didn't extensevely try the NNX, but it seems PyTorch code.
+
+To run linen pre-train:
+
 ```bash
-python train.py 
+python train.py --seed 42 --output models/DLN-pre
+```
+
+And for fine-tune:
+```bash
+python train.py --seed 42 --model-folder models/DLN-pre --fine-tune True
+```
+
+### Testing
+I only made the inference script for the linen model.
+You can run it with:
+```bash
+python test.py --image-dataset datasets/test/LOL/low/ --model-folder models/DLN --output results
 ```
 
 ## BibTex
